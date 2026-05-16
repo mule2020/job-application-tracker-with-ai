@@ -5,6 +5,7 @@ import com.muluken.jobtracker.activity.service.ActivityService;
 import com.muluken.jobtracker.application.model.JobApplication;
 import com.muluken.jobtracker.application.repository.JobApplicationRepository;
 import com.muluken.jobtracker.common.exception.ApiException;
+import com.muluken.jobtracker.common.service.RateLimitService;
 import com.muluken.jobtracker.coverletter.dtos.*;
 import com.muluken.jobtracker.coverletter.model.CoverLetter;
 import com.muluken.jobtracker.coverletter.repository.CoverLetterRepository;
@@ -32,10 +33,18 @@ public class CoverLetterService {
     private final GeneratedResumeRepository generatedResumeRepository;
     private final CoverLetterRepository coverLetterRepository;
     private final ActivityService activityService;
+    private final RateLimitService rateLimitService;
     private final GroqService groqService;
 
     public GeneratedCoverLetterResponse generate(String email, GenerateCoverLetterRequest request) {
-
+        if (!rateLimitService.tryConsume(email)) {
+            long remaining = rateLimitService.getRemainingTokens(email);
+            throw new ApiException(
+                    "Generation limit reached. You have " + remaining +
+                            " generations remaining. Limit resets every hour.",
+                    HttpStatus.TOO_MANY_REQUESTS
+            );
+        }
         User user = getUser(email);
 
         UserProfile profile = userProfileRepository.findByUserId(user.getId())

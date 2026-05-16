@@ -5,6 +5,7 @@ import com.muluken.jobtracker.activity.service.ActivityService;
 import com.muluken.jobtracker.application.model.JobApplication;
 import com.muluken.jobtracker.application.repository.JobApplicationRepository;
 import com.muluken.jobtracker.common.exception.ApiException;
+import com.muluken.jobtracker.common.service.RateLimitService;
 import com.muluken.jobtracker.resume.dto.*;
 import com.muluken.jobtracker.resume.model.GeneratedResume;
 import com.muluken.jobtracker.resume.repository.GeneratedResumeRepository;
@@ -28,10 +29,19 @@ public class ResumeService {
     private final JobApplicationRepository jobApplicationRepository;
     private final GeneratedResumeRepository generatedResumeRepository;
     private final ActivityService activityService;
+    private final RateLimitService rateLimitService;
     private final GroqService groqService;
 
     public GenerateResumeResponse generateResume(String email, GenerateResumeRequest request) {
 
+        if (!rateLimitService.tryConsume(email)) {
+            long remaining = rateLimitService.getRemainingTokens(email);
+            throw new ApiException(
+                    "Generation limit reached. You have " + remaining +
+                            " generations remaining. Limit resets every hour.",
+                    HttpStatus.TOO_MANY_REQUESTS
+            );
+        }
         User user = getUser(email);
 
         UserProfile profile = userProfileRepository.findByUserId(user.getId())

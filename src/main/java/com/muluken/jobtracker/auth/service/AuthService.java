@@ -42,9 +42,7 @@ public class AuthService {
         userRepository.save(user);
         emailService.sendVerificationEmail(user.getEmail(), user.getVerificationToken());
 
-        System.out.println(
-                "Verify your email by clicking the link: " + user.getVerificationToken()
-        );
+
     }
 
     // VERIFY EMAIL
@@ -96,7 +94,6 @@ public class AuthService {
 
     // REFRESH TOKEN
     public AuthResponse refreshToken(RefreshTokenRequest request) {
-
         String email;
         try {
             email = jwtService.extractEmail(request.getRefreshToken());
@@ -106,8 +103,7 @@ public class AuthService {
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() ->
-                        new ApiException("User not found", HttpStatus.NOT_FOUND)
-                );
+                        new ApiException("User not found", HttpStatus.NOT_FOUND));
 
         boolean validTokenExists = refreshTokenRepository.findAll()
                 .stream()
@@ -122,9 +118,9 @@ public class AuthService {
 
         String newAccessToken = jwtService.generateAccessToken(email);
 
-        return new AuthResponse(newAccessToken, request.getRefreshToken(), "Token refreshed", null, null);
+        // Don't return refresh token in body anymore
+        return new AuthResponse(newAccessToken, null, "Token refreshed", null, null);
     }
-
     // LOGOUT
     public void logout(RefreshTokenRequest request) {
 

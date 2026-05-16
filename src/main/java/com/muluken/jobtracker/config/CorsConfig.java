@@ -46,6 +46,20 @@ public class CorsConfig {
         // Cache preflight for 1 hour
         config.setMaxAge(3600L);
 
+        config.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Origin",
+                "X-Requested-With",
+                "Cookie"
+        ));
+
+        config.setExposedHeaders(List.of(
+                "Authorization",
+                "Set-Cookie"
+        ));
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
 
