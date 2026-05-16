@@ -1,5 +1,7 @@
 package com.muluken.jobtracker.resume.service;
 
+import com.muluken.jobtracker.activity.model.ActivityType;
+import com.muluken.jobtracker.activity.service.ActivityService;
 import com.muluken.jobtracker.application.model.JobApplication;
 import com.muluken.jobtracker.application.repository.JobApplicationRepository;
 import com.muluken.jobtracker.common.exception.ApiException;
@@ -25,6 +27,7 @@ public class ResumeService {
     private final UserProfileRepository userProfileRepository;
     private final JobApplicationRepository jobApplicationRepository;
     private final GeneratedResumeRepository generatedResumeRepository;
+    private final ActivityService activityService;
     private final GroqService groqService;
 
     public GenerateResumeResponse generateResume(String email, GenerateResumeRequest request) {
@@ -73,7 +76,13 @@ public class ResumeService {
                 application.getJobTitle(),
                 application.getJobDescription()
         );
-
+        activityService.log(
+                user,
+                ActivityType.RESUME_GENERATED,
+                "Resume Generated",
+                application.getCompany(),
+                application.getJobTitle()
+        );
         return new GenerateResumeResponse(groqService.generateText(prompt));
     }
 
@@ -90,7 +99,13 @@ public class ResumeService {
         resume.setApplication(application);
         resume.setGeneratedContent(request.getGeneratedContent());
         resume.setName(application.getCompany() + " - " + application.getJobTitle() + " Resume");
-
+        activityService.log(
+                user,
+                ActivityType.RESUME_SAVED,
+                "Generated Resume Saved",
+                application.getCompany(),
+                application.getJobTitle()
+        );
         return map(generatedResumeRepository.save(resume));
     }
 
@@ -136,7 +151,16 @@ public class ResumeService {
     public void deleteResume(String email, UUID resumeId) {
 
         User user = getUser(email);
-        generatedResumeRepository.delete(getOwnedResume(user, resumeId));
+        GeneratedResume resume = getOwnedResume(user, resumeId);
+
+        // Nullify the reference on JobApplication side first
+        JobApplication application = resume.getApplication();
+        if (application != null) {
+            application.setGeneratedResume(null);
+            jobApplicationRepository.save(application);
+        }
+
+        generatedResumeRepository.delete(resume);
     }
 
     private User getUser(String email) {

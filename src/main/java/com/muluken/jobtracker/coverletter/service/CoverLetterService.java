@@ -1,5 +1,7 @@
 package com.muluken.jobtracker.coverletter.service;
 
+import com.muluken.jobtracker.activity.model.ActivityType;
+import com.muluken.jobtracker.activity.service.ActivityService;
 import com.muluken.jobtracker.application.model.JobApplication;
 import com.muluken.jobtracker.application.repository.JobApplicationRepository;
 import com.muluken.jobtracker.common.exception.ApiException;
@@ -29,6 +31,7 @@ public class CoverLetterService {
     private final JobApplicationRepository jobApplicationRepository;
     private final GeneratedResumeRepository generatedResumeRepository;
     private final CoverLetterRepository coverLetterRepository;
+    private final ActivityService activityService;
     private final GroqService groqService;
 
     public GeneratedCoverLetterResponse generate(String email, GenerateCoverLetterRequest request) {
@@ -92,6 +95,13 @@ public class CoverLetterService {
                 application.getJobTitle(),
                 application.getJobDescription()
         );
+        activityService.log(
+                user,
+                ActivityType.COVER_LETTER_GENERATED,
+                "Cover Letter Generated",
+                application.getCompany(),
+                application.getJobTitle()
+        );
 
         return new GeneratedCoverLetterResponse(groqService.generateText(prompt));
     }
@@ -109,7 +119,13 @@ public class CoverLetterService {
         letter.setApplication(application);
         letter.setContent(request.getContent());
         letter.setName(application.getCompany() + " - " + application.getJobTitle() + " Cover Letter");
-
+        activityService.log(
+                user,
+                ActivityType.COVER_LETTER_SAVED,
+                "Cover Letter Saved",
+                application.getCompany(),
+                application.getJobTitle()
+        );
         return map(coverLetterRepository.save(letter));
     }
 
@@ -155,7 +171,16 @@ public class CoverLetterService {
     public void delete(String email, UUID id) {
 
         User user = getUser(email);
-        coverLetterRepository.delete(getOwnedCoverLetter(user, id));
+        CoverLetter letter = getOwnedCoverLetter(user, id);
+
+        // Nullify the reference on JobApplication side first
+        JobApplication application = letter.getApplication();
+        if (application != null) {
+            application.setCoverLetter(null);
+            jobApplicationRepository.save(application);
+        }
+
+        coverLetterRepository.delete(letter);
     }
 
     private User getUser(String email) {

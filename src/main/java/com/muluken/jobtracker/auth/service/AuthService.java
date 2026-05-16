@@ -1,12 +1,10 @@
 package com.muluken.jobtracker.auth.service;
 
-import com.muluken.jobtracker.auth.dto.AuthResponse;
-import com.muluken.jobtracker.auth.dto.LoginRequest;
-import com.muluken.jobtracker.auth.dto.RefreshTokenRequest;
-import com.muluken.jobtracker.auth.dto.RegisterRequest;
+import com.muluken.jobtracker.auth.dto.*;
 import com.muluken.jobtracker.auth.model.RefreshToken;
 import com.muluken.jobtracker.auth.repository.RefreshTokenRepository;
 import com.muluken.jobtracker.common.exception.ApiException;
+import com.muluken.jobtracker.common.service.EmailService;
 import com.muluken.jobtracker.security.jwt.JwtService;
 import com.muluken.jobtracker.user.model.User;
 import com.muluken.jobtracker.user.repository.UserRepository;
@@ -25,6 +23,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final EmailService emailService;
     private final RefreshTokenRepository refreshTokenRepository;
 
     //REGISTER
@@ -41,6 +40,7 @@ public class AuthService {
         user.setVerificationToken(UUID.randomUUID().toString());
 
         userRepository.save(user);
+        emailService.sendVerificationEmail(user.getEmail(), user.getVerificationToken());
 
         System.out.println(
                 "Verify your email by clicking the link: " + user.getVerificationToken()
@@ -54,7 +54,9 @@ public class AuthService {
                 .orElseThrow(() ->
                         new ApiException("Invalid verification token", HttpStatus.BAD_REQUEST)
                 );
-
+        if (user.getIsVerified()) {
+            return;
+        }
         user.setIsVerified(true);
         user.setVerificationToken(null);
 
@@ -135,6 +137,85 @@ public class AuthService {
                     refreshTokenRepository.save(token);
                 }, () -> {
                     throw new ApiException("Refresh token not found", HttpStatus.BAD_REQUEST);
+                });
+    }
+
+
+    //Change Password
+    public void changePassword(String email, ChangePasswordRequest request) {
+
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new ApiException("Passwords do not match", HttpStatus.BAD_REQUEST);
+        }
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() ->
+                        new ApiException("User not found", HttpStatus.NOT_FOUND)
+                );
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
+            throw new ApiException("Current password is incorrect", HttpStatus.BAD_REQUEST);
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+        // Revoke all refresh tokens — force re-login on all devices
+        refreshTokenRepository.findAll()
+                .stream()
+                .filter(token -> token.getUser().getId().equals(user.getId()))
+                .filter(token -> !token.getRevoked())
+                .forEach(token -> {
+                    token.setRevoked(true);
+                    refreshTokenRepository.save(token);
+                });
+    }
+
+    // Forgot Password
+
+    public void forgotPassword(ForgotPasswordRequest request) {
+
+        // Always return success even if email not found — security best practice
+        // Don't reveal whether an email exists in the system
+        userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
+            String resetToken = UUID.randomUUID().toString();
+            user.setPasswordResetToken(resetToken);
+            user.setPasswordResetTokenExpiresAt(LocalDateTime.now().plusHours(1));
+            userRepository.save(user);
+            emailService.sendPasswordResetEmail(user.getEmail(), resetToken);
+        });
+    }
+
+    // Reset Password
+
+    public void resetPassword(ResetPasswordRequest request) {
+
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new ApiException("Passwords do not match", HttpStatus.BAD_REQUEST);
+        }
+
+        User user = userRepository.findByPasswordResetToken(request.getToken())
+                .orElseThrow(() ->
+                        new ApiException("Invalid or expired reset token", HttpStatus.BAD_REQUEST)
+                );
+
+        if (user.getPasswordResetTokenExpiresAt() == null ||
+                user.getPasswordResetTokenExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new ApiException("Reset token has expired", HttpStatus.BAD_REQUEST);
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setPasswordResetToken(null);
+        user.setPasswordResetTokenExpiresAt(null);
+
+        userRepository.save(user);
+        // Revoke all refresh tokens — force re-login
+        refreshTokenRepository.findAll()
+                .stream()
+                .filter(token -> token.getUser().getId().equals(user.getId()))
+                .filter(token -> !token.getRevoked())
+                .forEach(token -> {
+                    token.setRevoked(true);
+                    refreshTokenRepository.save(token);
                 });
     }
 }

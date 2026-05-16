@@ -1,5 +1,7 @@
 package com.muluken.jobtracker.application.service;
 
+import com.muluken.jobtracker.activity.model.ActivityType;
+import com.muluken.jobtracker.activity.service.ActivityService;
 import com.muluken.jobtracker.application.dto.ApplicationStatsResponse;
 import com.muluken.jobtracker.application.dto.CreateJobApplicationRequest;
 import com.muluken.jobtracker.application.dto.JobApplicationResponse;
@@ -30,8 +32,10 @@ public class JobApplicationService {
     private final UserRepository userRepository;
     private final GeneratedResumeRepository generatedResumeRepository;
     private final CoverLetterRepository coverLetterRepository;
+    private final ActivityService activityService; // ← NEW
 
-    public JobApplicationResponse createApplication(String email, CreateJobApplicationRequest request) {
+    public JobApplicationResponse createApplication(
+            String email, CreateJobApplicationRequest request) {
 
         User user = getUserByEmail(email);
 
@@ -47,10 +51,22 @@ public class JobApplicationService {
         application.setNotes(request.getNotes());
         application.setAppliedAt(request.getAppliedAt());
 
-        return map(jobApplicationRepository.save(application));
+        JobApplication saved = jobApplicationRepository.save(application);
+
+        // ── Log activity ──────────────────────────────────
+        activityService.log(
+                user,
+                ActivityType.APPLICATION_CREATED,
+                "Created application",
+                saved.getCompany(),
+                saved.getJobTitle()
+        );
+
+        return map(saved);
     }
 
-    public Page<JobApplicationResponse> getApplications(String email, int page, int size, ApplicationStatus status) {
+    public Page<JobApplicationResponse> getApplications(
+            String email, int page, int size, ApplicationStatus status) {
 
         User user = getUserByEmail(email);
         PageRequest pageable = PageRequest.of(page, size);
@@ -63,34 +79,53 @@ public class JobApplicationService {
         return applications.map(this::map);
     }
 
-    public JobApplicationResponse getApplicationById(String email, UUID applicationId) {
+    public JobApplicationResponse getApplicationById(
+            String email, UUID applicationId) {
 
         User user = getUserByEmail(email);
         return map(getOwnedApplication(user, applicationId));
     }
 
-    public JobApplicationResponse updateApplication(String email, UUID applicationId, UpdateJobApplicationRequest request) {
+    public JobApplicationResponse updateApplication(
+            String email, UUID applicationId, UpdateJobApplicationRequest request) {
 
         User user = getUserByEmail(email);
         JobApplication application = getOwnedApplication(user, applicationId);
 
-        if (request.getCompany() != null) application.setCompany(request.getCompany());
-        if (request.getJobTitle() != null) application.setJobTitle(request.getJobTitle());
-        if (request.getJobDescription() != null) application.setJobDescription(request.getJobDescription());
-        if (request.getStatus() != null) application.setStatus(request.getStatus());
-        if (request.getJobUrl() != null) application.setJobUrl(request.getJobUrl());
-        if (request.getSalaryRange() != null) application.setSalaryRange(request.getSalaryRange());
-        if (request.getLocation() != null) application.setLocation(request.getLocation());
-        if (request.getNotes() != null) application.setNotes(request.getNotes());
-        if (request.getAppliedAt() != null) application.setAppliedAt(request.getAppliedAt());
+        // ── Track status before update ────────────────────
+        ApplicationStatus oldStatus = application.getStatus();
 
-        return map(jobApplicationRepository.save(application));
+        if (request.getCompany()        != null) application.setCompany(request.getCompany());
+        if (request.getJobTitle()       != null) application.setJobTitle(request.getJobTitle());
+        if (request.getJobDescription() != null) application.setJobDescription(request.getJobDescription());
+        if (request.getStatus()         != null) application.setStatus(request.getStatus());
+        if (request.getJobUrl()         != null) application.setJobUrl(request.getJobUrl());
+        if (request.getSalaryRange()    != null) application.setSalaryRange(request.getSalaryRange());
+        if (request.getLocation()       != null) application.setLocation(request.getLocation());
+        if (request.getNotes()          != null) application.setNotes(request.getNotes());
+        if (request.getAppliedAt()      != null) application.setAppliedAt(request.getAppliedAt());
+
+        JobApplication saved = jobApplicationRepository.save(application);
+
+        // ── Log status change only if status changed ──────
+        if (request.getStatus() != null && !oldStatus.equals(request.getStatus())) {
+            activityService.log(
+                    user,
+                    ActivityType.STATUS_UPDATED,
+                    "Status updated to " + request.getStatus(),
+                    saved.getCompany(),
+                    saved.getJobTitle()
+            );
+        }
+
+        return map(saved);
     }
 
     public void deleteApplication(String email, UUID applicationId) {
 
         User user = getUserByEmail(email);
-        jobApplicationRepository.delete(getOwnedApplication(user, applicationId));
+        JobApplication application = getOwnedApplication(user, applicationId);
+        jobApplicationRepository.delete(application);
     }
 
     public ApplicationStatsResponse getStats(String email) {
@@ -112,13 +147,15 @@ public class JobApplicationService {
 
     private User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ApiException("User not found", HttpStatus.NOT_FOUND));
+                .orElseThrow(() ->
+                        new ApiException("User not found", HttpStatus.NOT_FOUND));
     }
 
     private JobApplication getOwnedApplication(User user, UUID applicationId) {
 
         JobApplication application = jobApplicationRepository.findById(applicationId)
-                .orElseThrow(() -> new ApiException("Application not found", HttpStatus.NOT_FOUND));
+                .orElseThrow(() ->
+                        new ApiException("Application not found", HttpStatus.NOT_FOUND));
 
         if (!application.getUser().getId().equals(user.getId())) {
             throw new ApiException("Access denied", HttpStatus.FORBIDDEN);
@@ -129,8 +166,10 @@ public class JobApplicationService {
 
     private JobApplicationResponse map(JobApplication app) {
 
-        GeneratedResume resume = generatedResumeRepository.findByApplicationId(app.getId()).orElse(null);
-        CoverLetter cover = coverLetterRepository.findByApplicationId(app.getId()).orElse(null);
+        GeneratedResume resume = generatedResumeRepository
+                .findByApplicationId(app.getId()).orElse(null);
+        CoverLetter cover = coverLetterRepository
+                .findByApplicationId(app.getId()).orElse(null);
 
         return new JobApplicationResponse(
                 app.getId(),
@@ -145,10 +184,8 @@ public class JobApplicationService {
                 app.getAppliedAt(),
                 app.getCreatedAt(),
                 app.getUpdatedAt(),
-
                 resume != null,
                 resume != null ? trim(resume.getGeneratedContent()) : null,
-
                 cover != null,
                 cover != null ? trim(cover.getContent()) : null
         );

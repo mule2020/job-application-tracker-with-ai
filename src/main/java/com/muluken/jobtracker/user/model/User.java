@@ -8,7 +8,9 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
-@Getter
+import java.time.LocalDateTime;
+
+        @Getter
 @Setter
 @Entity
 @Table(name = "users")
@@ -23,5 +25,9 @@ public class User extends BaseEntity {
     private Boolean isVerified = false;
 
     private String verificationToken;
+
+    private String passwordResetToken;
+
+    private LocalDateTime passwordResetTokenExpiresAt;
 }
 

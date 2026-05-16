@@ -77,17 +77,17 @@ public class JobApplicationController {
         jobApplicationService.deleteApplication(authentication.getName(), id);
     }
 
-    @GetMapping("/stats")
-    @Operation(summary = "Get application statistics for current user")
-    public ApplicationStatsResponse getStats(Authentication authentication) {
-        return jobApplicationService.getStats(authentication.getName());
-    }
-
-    @GetMapping("/statuses")
-    @Operation(summary = "Get all valid application statuses")
-    public List<String> getStatuses() {
-        return Arrays.stream(ApplicationStatus.values())
-                .map(Enum::name)
-                .toList();
-    }
+//    @GetMapping("/stats")
+//    @Operation(summary = "Get application statistics for current user")
+//    public ApplicationStatsResponse getStats(Authentication authentication) {
+//        return jobApplicationService.getStats(authentication.getName());
+//    }
+//
+//    @GetMapping("/statuses")
+//    @Operation(summary = "Get all valid application statuses")
+//    public List<String> getStatuses() {
+//        return Arrays.stream(ApplicationStatus.values())
+//                .map(Enum::name)
+//                .toList();
+//    }
 }
