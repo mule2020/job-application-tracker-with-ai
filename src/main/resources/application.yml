@@ -46,3 +46,5 @@ app:
 springdoc:
   packages-to-scan: com.muluken.jobtracker
   paths-to-match: /api/**
+  swagger-ui:
+    url: /v3/api-docs
