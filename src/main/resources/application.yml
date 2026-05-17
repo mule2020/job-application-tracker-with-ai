@@ -16,7 +16,7 @@ spring:
         format_sql: false
 
   mail:
-    host: ${MAIL_HOST}
+    host: smtp-relay.brevo.com
     port: 465
     username: ${MAIL_USERNAME}
     password: ${MAIL_PASSWORD}
