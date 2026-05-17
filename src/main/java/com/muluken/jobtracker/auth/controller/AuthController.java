@@ -88,7 +88,7 @@ public class AuthController {
         //  Clear the cookie
         Cookie cookie = new Cookie("refreshToken", "");
         cookie.setHttpOnly(true);
-        cookie.setSecure(false); // true in production
+        cookie.setSecure(true); // true in production
         cookie.setPath("/api/auth");
         cookie.setMaxAge(0); // delete immediately
         response.addCookie(cookie);
