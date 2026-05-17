@@ -19,7 +19,7 @@ public class EmailService {
     @Value("${app.mail-from}")
     private String fromEmail;
 
-    @Value("${BREVO_API_KEY}")
+    @Value("${brevo.api-key}")
     private String brevoApiKey;
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
