@@ -1,20 +1,17 @@
 package com.muluken.jobtracker.common.service;
 
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class EmailService {
-
-    private final JavaMailSender mailSender;
 
     @Value("${app.frontend-url}")
     private String frontendUrl;
@@ -22,15 +19,16 @@ public class EmailService {
     @Value("${app.mail-from}")
     private String fromEmail;
 
+    @Value("${brevo.api-key}")
+    private String brevoApiKey;
+
+    private final HttpClient httpClient = HttpClient.newHttpClient();
+
     public void sendVerificationEmail(String toEmail, String token) {
         String verifyUrl = frontendUrl + "/verify-email?token=" + token;
 
         String html = """
                 <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                    <div style="background: #2563eb; width: 40px; height: 40px; border-radius: 10px;
-                                display:flex; align-items:center; justify-content:center; margin-bottom:24px;">
-                        <span style="color:white; font-size:20px;">✉</span>
-                    </div>
                     <h1 style="font-size:24px; font-weight:700; color:#0f172a; margin-bottom:8px;">
                         Verify your email
                     </h1>
@@ -48,8 +46,6 @@ public class EmailService {
                         This link expires in 24 hours. If you didn't create an account,
                         you can safely ignore this email.
                     </p>
-                    <hr style="border:none; border-top:1px solid #e2e8f0; margin:24px 0;" />
-                    <p style="color:#cbd5e1; font-size:12px;">JobTrackr · Built for job seekers</p>
                 </div>
                 """.formatted(verifyUrl);
 
@@ -61,10 +57,6 @@ public class EmailService {
 
         String html = """
                 <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
-                    <div style="background: #dc2626; width: 40px; height: 40px; border-radius: 10px;
-                                display:flex; align-items:center; justify-content:center; margin-bottom:24px;">
-                        <span style="color:white; font-size:20px;">🔒</span>
-                    </div>
                     <h1 style="font-size:24px; font-weight:700; color:#0f172a; margin-bottom:8px;">
                         Reset your password
                     </h1>
@@ -82,8 +74,6 @@ public class EmailService {
                         This link expires in 1 hour. If you didn't request a password reset,
                         you can safely ignore this email.
                     </p>
-                    <hr style="border:none; border-top:1px solid #e2e8f0; margin:24px 0;" />
-                    <p style="color:#cbd5e1; font-size:12px;">JobTrackr · Built for job seekers</p>
                 </div>
                 """.formatted(resetUrl);
 
@@ -92,16 +82,51 @@ public class EmailService {
 
     private void sendEmail(String to, String subject, String html) {
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setFrom(fromEmail);
-            helper.setTo(to);
-            helper.setSubject(subject);
-            helper.setText(html, true);
-            mailSender.send(message);
-            log.info("Email sent to {}", to);
-        } catch (MessagingException e) {
+            String body = """
+                    {
+                        "sender": {"email": "%s"},
+                        "to": [{"email": "%s"}],
+                        "subject": "%s",
+                        "htmlContent": %s
+                    }
+                    """.formatted(
+                    fromEmail,
+                    to,
+                    subject,
+                    toJsonString(html)
+            );
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.brevo.com/v3/smtp/email"))
+                    .header("accept", "application/json")
+                    .header("content-type", "application/json")
+                    .header("api-key", brevoApiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(
+                    request, HttpResponse.BodyHandlers.ofString()
+            );
+
+            if (response.statusCode() == 201) {
+                log.info("Email sent to {}", to);
+            } else {
+                log.error("Failed to send email. Status: {}, Body: {}",
+                        response.statusCode(), response.body());
+            }
+        } catch (Exception e) {
             log.error("Failed to send email to {}: {}", to, e.getMessage());
+            throw new RuntimeException("Failed to send email", e);
         }
+    }
+
+    private String toJsonString(String text) {
+        return "\"" + text
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+                + "\"";
     }
 }
