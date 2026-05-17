@@ -21,6 +21,7 @@ public class CorsConfig {
         CorsConfiguration config = new CorsConfiguration();
 
         config.setAllowedOrigins(List.of(
+                "https://job-app-tracker-frontend-five.vercel.app",
                 frontendUrl,
                 "https://applytrackr.up.railway.app",
                 "http://localhost:5173",
