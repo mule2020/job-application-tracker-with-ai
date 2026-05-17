@@ -1,5 +1,6 @@
 package com.muluken.jobtracker.common.service;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,11 @@ public class EmailService {
 
     @Value("${brevo.api-key}")
     private String brevoApiKey;
+
+    @PostConstruct
+    public void test() {
+        System.out.println("BREVO KEY = " + brevoApiKey);
+    }
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
