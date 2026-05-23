@@ -1,20 +1,57 @@
+services:
 
-  services:
-    postgres:
-      image: postgres:16
-      container_name: jobtracker-postgres
+  postgres:
+    image: postgres:16
+    container_name: jobtracker-postgres
+    environment:
+      POSTGRES_DB: jobtracker_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d jobtracker_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-      environment:
-        POSTGRES_DB: jobtracker_db
-        POSTGRES_USER: admin
-        POSTGRES_PASSWORD: admin123
+  backend:
+    build:
+      context: D:/javaPro/job-application-tracker
+      dockerfile: Dockerfile
+    container_name: jobtracker-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/jobtracker_db
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: admin123
+      PORT: 8080
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_EXPIRATION: ${JWT_ACCESS_EXPIRATION}
+      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL}
+      BREVO_API_KEY: ${BREVO_API_KEY}
+      APP_FRONTEND_URL: http://localhost:5173
+      MAIL_FROM: ${MAIL_FROM}
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID}
+      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
 
-      ports:
-        - "5434:5432"
+  frontend:
+    build:
+      context: D:/javaPro/job-app-front
+      dockerfile: Dockerfile
+    container_name: jobtracker-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
 
-      volumes:
-        - postgres_data:/var/lib/postgresql/data
-
-  volumes:
-    postgres_data:
-
+volumes:
+  postgres_data:
